@@ -102,24 +102,32 @@ document.addEventListener('DOMContentLoaded', function() {
             hour: '2-digit',
             minute: '2-digit'
         }) : 'No due date';
+
+        const isComplete = card.completion_rate === 100;
+        const progressClass = isComplete ? 'bg-success' : '';
         
         return `
             <div class="card" data-card-id="${card.id}">
-                <div class="card-title fw-bold">${card.title}</div>
-                <div class="card-description text-muted mb-2">
+                <div class="card-title">
+                    <i class="fas fa-tasks me-2"></i>${card.title}
+                </div>
+                <div class="card-description">
                     ${card.description || 'No description'}
                 </div>
                 <div class="card-meta">
-                    <div class="mb-1">
-                        <i class="fas fa-calendar"></i> Due: ${dueDate}
+                    <div>
+                        <i class="fas fa-calendar-alt"></i>
+                        ${dueDate}
                     </div>
-                    <div class="mb-1">
-                        <i class="fas fa-user"></i> Assigned to: ${card.assigned_to || 'Unassigned'}
+                    <div>
+                        <i class="fas fa-user"></i>
+                        ${card.assigned_to || 'Unassigned'}
                     </div>
-                    <div class="mb-1">
+                    <div>
+                        <i class="fas fa-chart-line"></i>
                         Progress: ${card.completion_rate}%
                         <div class="progress">
-                            <div class="progress-bar ${card.completion_rate === 100 ? 'bg-success' : ''}" 
+                            <div class="progress-bar ${progressClass}" 
                                  role="progressbar" 
                                  style="width: ${card.completion_rate}%"
                                  aria-valuenow="${card.completion_rate}" 
