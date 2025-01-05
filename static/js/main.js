@@ -4,6 +4,9 @@ document.addEventListener('DOMContentLoaded', function() {
     const addCardModal = new bootstrap.Modal(document.getElementById('addCardModal'));
     const editCardModal = new bootstrap.Modal(document.getElementById('editCardModal'));
     
+    // Store cards data
+    let cardsData = {};
+    
     // Load initial data
     loadLists();
 
@@ -14,13 +17,19 @@ document.addEventListener('DOMContentLoaded', function() {
     document.getElementById('updateCardBtn').addEventListener('click', updateCard);
     document.getElementById('deleteCardBtn').addEventListener('click', deleteCard);
 
-    // Functions
     async function loadLists() {
         try {
             const response = await fetch('/api/lists');
             const lists = await response.json();
             const board = document.getElementById('board');
             board.innerHTML = '';
+            
+            // Store cards data
+            lists.forEach(list => {
+                list.cards.forEach(card => {
+                    cardsData[card.id] = card;
+                });
+            });
             
             lists.forEach(list => {
                 const listElement = createListElement(list);
@@ -71,33 +80,148 @@ document.addEventListener('DOMContentLoaded', function() {
             addCardModal.show();
         });
 
-        listDiv.querySelectorAll('.card').forEach(cardElement => {
-            cardElement.addEventListener('click', () => openEditCardModal(cardElement.dataset.cardId));
+        // Add click event listeners to all cards in this list
+        const cards = listDiv.querySelectorAll('.card');
+        cards.forEach(card => {
+            card.addEventListener('click', (e) => {
+                // Prevent event from triggering when clicking on draggable elements
+                if (!e.target.closest('.sortable-ghost')) {
+                    openEditCardModal(card.dataset.cardId);
+                }
+            });
         });
 
         return listDiv;
     }
 
     function createCardHTML(card) {
-        const dueDate = card.due_date ? new Date(card.due_date).toLocaleDateString() : 'No due date';
+        const dueDate = card.due_date ? new Date(card.due_date).toLocaleString('en-US', {
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit',
+            hour: '2-digit',
+            minute: '2-digit'
+        }) : 'No due date';
+        
         return `
             <div class="card" data-card-id="${card.id}">
-                <div class="card-title">${card.title}</div>
+                <div class="card-title fw-bold">${card.title}</div>
+                <div class="card-description text-muted mb-2">
+                    ${card.description || 'No description'}
+                </div>
                 <div class="card-meta">
                     <div class="mb-1">
-                        <i class="fas fa-user"></i> ${card.assigned_to || 'Unassigned'}
+                        <i class="fas fa-calendar"></i> Due: ${dueDate}
                     </div>
                     <div class="mb-1">
-                        <i class="fas fa-calendar"></i> ${dueDate}
+                        <i class="fas fa-user"></i> Assigned to: ${card.assigned_to || 'Unassigned'}
                     </div>
-                    <div class="progress">
-                        <div class="progress-bar" role="progressbar" style="width: ${card.completion_rate}%"
-                             aria-valuenow="${card.completion_rate}" aria-valuemin="0" aria-valuemax="100">
+                    <div class="mb-1">
+                        Progress: ${card.completion_rate}%
+                        <div class="progress">
+                            <div class="progress-bar ${card.completion_rate === 100 ? 'bg-success' : ''}" 
+                                 role="progressbar" 
+                                 style="width: ${card.completion_rate}%"
+                                 aria-valuenow="${card.completion_rate}" 
+                                 aria-valuemin="0" 
+                                 aria-valuemax="100">
+                            </div>
                         </div>
                     </div>
                 </div>
             </div>
         `;
+    }
+
+    function openEditCardModal(cardId) {
+        const card = cardsData[cardId];
+        if (!card) {
+            console.error('Card not found:', cardId);
+            return;
+        }
+
+        // Populate modal with card data
+        document.getElementById('editCardId').value = cardId;
+        document.getElementById('editCardTitle').value = card.title || '';
+        document.getElementById('editCardDescription').value = card.description || '';
+        document.getElementById('editCardDueDate').value = card.due_date ? card.due_date.slice(0, 16) : '';
+        document.getElementById('editCardAssignedTo').value = card.assigned_to || '';
+        document.getElementById('editCardCompletion').value = card.completion_rate || 0;
+
+        editCardModal.show();
+    }
+
+    async function updateCard() {
+        const cardId = document.getElementById('editCardId').value;
+        const data = {
+            title: document.getElementById('editCardTitle').value.trim(),
+            description: document.getElementById('editCardDescription').value.trim(),
+            due_date: document.getElementById('editCardDueDate').value,
+            assigned_to: document.getElementById('editCardAssignedTo').value.trim(),
+            completion_rate: parseInt(document.getElementById('editCardCompletion').value)
+        };
+
+        if (!data.title) return;
+
+        try {
+            const response = await fetch(`/api/cards/${cardId}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(data)
+            });
+
+            if (response.ok) {
+                editCardModal.hide();
+                // Update the stored card data
+                cardsData[cardId] = { ...cardsData[cardId], ...data };
+                loadLists();
+            }
+        } catch (error) {
+            console.error('Error updating card:', error);
+        }
+    }
+
+    async function deleteCard() {
+        const cardId = document.getElementById('editCardId').value;
+        if (!confirm('Are you sure you want to delete this card?')) return;
+
+        try {
+            const response = await fetch(`/api/cards/${cardId}`, {
+                method: 'DELETE'
+            });
+
+            if (response.ok) {
+                editCardModal.hide();
+                // Remove the card from stored data
+                delete cardsData[cardId];
+                loadLists();
+            }
+        } catch (error) {
+            console.error('Error deleting card:', error);
+        }
+    }
+
+    async function handleCardDrop(event) {
+        const cardId = event.item.dataset.cardId;
+        const newListId = event.to.closest('.list').dataset.listId;
+        const newPosition = Array.from(event.to.children).indexOf(event.item);
+
+        try {
+            await fetch(`/api/cards/${cardId}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    list_id: parseInt(newListId),
+                    position: newPosition
+                })
+            });
+            // Update the stored card data
+            cardsData[cardId].list_id = parseInt(newListId);
+            cardsData[cardId].position = newPosition;
+        } catch (error) {
+            console.error('Error updating card position:', error);
+            loadLists(); // Reload to restore original state
+        }
     }
 
     async function saveList() {
@@ -165,84 +289,6 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         } catch (error) {
             console.error('Error saving card:', error);
-        }
-    }
-
-    async function openEditCardModal(cardId) {
-        const card = document.querySelector(`[data-card-id="${cardId}"]`);
-        if (!card) return;
-
-        // Populate modal with card data
-        document.getElementById('editCardId').value = cardId;
-        document.getElementById('editCardTitle').value = card.querySelector('.card-title').textContent;
-        // Add other field population here
-
-        editCardModal.show();
-    }
-
-    async function updateCard() {
-        const cardId = document.getElementById('editCardId').value;
-        const data = {
-            title: document.getElementById('editCardTitle').value.trim(),
-            description: document.getElementById('editCardDescription').value.trim(),
-            due_date: document.getElementById('editCardDueDate').value,
-            assigned_to: document.getElementById('editCardAssignedTo').value.trim(),
-            completion_rate: parseInt(document.getElementById('editCardCompletion').value)
-        };
-
-        if (!data.title) return;
-
-        try {
-            const response = await fetch(`/api/cards/${cardId}`, {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(data)
-            });
-
-            if (response.ok) {
-                editCardModal.hide();
-                loadLists();
-            }
-        } catch (error) {
-            console.error('Error updating card:', error);
-        }
-    }
-
-    async function deleteCard() {
-        const cardId = document.getElementById('editCardId').value;
-        if (!confirm('Are you sure you want to delete this card?')) return;
-
-        try {
-            const response = await fetch(`/api/cards/${cardId}`, {
-                method: 'DELETE'
-            });
-
-            if (response.ok) {
-                editCardModal.hide();
-                loadLists();
-            }
-        } catch (error) {
-            console.error('Error deleting card:', error);
-        }
-    }
-
-    async function handleCardDrop(event) {
-        const cardId = event.item.dataset.cardId;
-        const newListId = event.to.closest('.list').dataset.listId;
-        const newPosition = Array.from(event.to.children).indexOf(event.item);
-
-        try {
-            await fetch(`/api/cards/${cardId}`, {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    list_id: parseInt(newListId),
-                    position: newPosition
-                })
-            });
-        } catch (error) {
-            console.error('Error updating card position:', error);
-            loadLists(); // Reload to restore original state
         }
     }
 

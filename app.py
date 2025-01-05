@@ -1,4 +1,5 @@
 from flask import Flask, render_template, request, jsonify, redirect, url_for
+from flask.views import MethodView
 from flask_sqlalchemy import SQLAlchemy
 from datetime import datetime
 import os
@@ -34,9 +35,8 @@ def index():
     lists = List.query.order_by(List.position).all()
     return render_template('index.html', lists=lists)
 
-@app.route('/api/lists', methods=['GET', 'POST'])
-def handle_lists():
-    if request.method == 'GET':
+class ListAPI(MethodView):
+    def get(self):
         lists = List.query.order_by(List.position).all()
         return jsonify([{
             'id': lst.id,
@@ -52,8 +52,8 @@ def handle_lists():
                 'position': card.position
             } for card in sorted(lst.cards, key=lambda x: x.position)]
         } for lst in lists])
-    
-    elif request.method == 'POST':
+
+    def post(self):
         data = request.json
         new_list = List(
             title=data['title'],
@@ -67,45 +67,44 @@ def handle_lists():
             'position': new_list.position
         })
 
-@app.route('/api/lists/<int:list_id>', methods=['PUT', 'DELETE'])
-def handle_list(list_id):
-    lst = List.query.get_or_404(list_id)
-    
-    if request.method == 'PUT':
+class ListDetailAPI(MethodView):
+    def put(self, list_id):
+        lst = List.query.get_or_404(list_id)
         data = request.json
         lst.title = data.get('title', lst.title)
         lst.position = data.get('position', lst.position)
         db.session.commit()
         return jsonify({'message': 'List updated successfully'})
-    
-    elif request.method == 'DELETE':
+
+    def delete(self, list_id):
+        lst = List.query.get_or_404(list_id)
         db.session.delete(lst)
         db.session.commit()
         return jsonify({'message': 'List deleted successfully'})
 
-@app.route('/api/cards', methods=['POST'])
-def create_card():
-    data = request.json
-    new_card = Card(
-        title=data['title'],
-        description=data.get('description', ''),
-        due_date=datetime.fromisoformat(data['due_date']) if data.get('due_date') else None,
-        assigned_to=data.get('assigned_to'),
-        completion_rate=data.get('completion_rate', 0),
-        position=data.get('position', Card.query.filter_by(list_id=data['list_id']).count()),
-        list_id=data['list_id']
-    )
-    db.session.add(new_card)
-    db.session.commit()
-    return jsonify({
-        'id': new_card.id,
-        'title': new_card.title,
-        'description': new_card.description,
-        'due_date': new_card.due_date.isoformat() if new_card.due_date else None,
-        'assigned_to': new_card.assigned_to,
-        'completion_rate': new_card.completion_rate,
-        'position': new_card.position
-    })
+class CardAPI(MethodView):
+    def post(self):
+        data = request.json
+        new_card = Card(
+            title=data['title'],
+            description=data.get('description', ''),
+            due_date=datetime.fromisoformat(data['due_date']) if data.get('due_date') else None,
+            assigned_to=data.get('assigned_to'),
+            completion_rate=data.get('completion_rate', 0),
+            position=data.get('position', Card.query.filter_by(list_id=data['list_id']).count()),
+            list_id=data['list_id']
+        )
+        db.session.add(new_card)
+        db.session.commit()
+        return jsonify({
+            'id': new_card.id,
+            'title': new_card.title,
+            'description': new_card.description,
+            'due_date': new_card.due_date.isoformat() if new_card.due_date else None,
+            'assigned_to': new_card.assigned_to,
+            'completion_rate': new_card.completion_rate,
+            'position': new_card.position
+        })
 
 @app.route('/api/cards/<int:card_id>', methods=['PUT', 'DELETE'])
 def handle_card(card_id):
@@ -115,7 +114,8 @@ def handle_card(card_id):
         data = request.json
         card.title = data.get('title', card.title)
         card.description = data.get('description', card.description)
-        card.due_date = datetime.fromisoformat(data['due_date']) if data.get('due_date') else card.due_date
+        if 'due_date' in data:
+            card.due_date = datetime.fromisoformat(data['due_date']) if data['due_date'] else None
         card.assigned_to = data.get('assigned_to', card.assigned_to)
         card.completion_rate = data.get('completion_rate', card.completion_rate)
         card.position = data.get('position', card.position)
@@ -127,6 +127,11 @@ def handle_card(card_id):
         db.session.delete(card)
         db.session.commit()
         return jsonify({'message': 'Card deleted successfully'})
+
+# Register the API views
+app.add_url_rule('/api/lists', view_func=ListAPI.as_view('lists'), methods=['GET', 'POST'])
+app.add_url_rule('/api/lists/<int:list_id>', view_func=ListDetailAPI.as_view('list'), methods=['PUT', 'DELETE'])
+app.add_url_rule('/api/cards', view_func=CardAPI.as_view('cards'), methods=['POST'])
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 5000)))
