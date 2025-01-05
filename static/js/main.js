@@ -7,6 +7,21 @@ document.addEventListener('DOMContentLoaded', function() {
     // Store cards data
     let cardsData = {};
     
+    // Debug: Log modal elements
+    const editModalElement = document.getElementById('editCardModal');
+    console.log('Edit modal elements:', {
+        modal: editModalElement,
+        form: editModalElement.querySelector('#editCardForm'),
+        fields: {
+            id: editModalElement.querySelector('#editCardId'),
+            title: editModalElement.querySelector('#editCardTitle'),
+            description: editModalElement.querySelector('#editCardDescription'),
+            dueDate: editModalElement.querySelector('#editCardDueDate'),
+            assignedTo: editModalElement.querySelector('#editCardAssignedTo'),
+            completionRate: editModalElement.querySelector('#editCardCompletion')
+        }
+    });
+    
     // Load initial data
     loadLists();
 
@@ -25,6 +40,7 @@ document.addEventListener('DOMContentLoaded', function() {
             board.innerHTML = '';
             
             // Store cards data
+            cardsData = {}; // Reset cards data
             lists.forEach(list => {
                 list.cards.forEach(card => {
                     cardsData[card.id] = card;
@@ -34,21 +50,9 @@ document.addEventListener('DOMContentLoaded', function() {
             lists.forEach(list => {
                 const listElement = createListElement(list);
                 board.appendChild(listElement);
-                
-                // Initialize Sortable for cards within this list
-                new Sortable(listElement.querySelector('.cards-container'), {
-                    group: 'cards',
-                    animation: 150,
-                    onEnd: handleCardDrop
-                });
             });
 
-            // Initialize Sortable for lists
-            new Sortable(board, {
-                animation: 150,
-                onEnd: handleListDrop
-            });
-
+            // Initialize drag and drop
             initializeDragAndDrop();
         } catch (error) {
             console.error('Error loading lists:', error);
@@ -86,14 +90,58 @@ document.addEventListener('DOMContentLoaded', function() {
         const cards = listDiv.querySelectorAll('.card');
         cards.forEach(card => {
             card.addEventListener('click', (e) => {
-                // Prevent event from triggering when clicking on draggable elements
-                if (!e.target.closest('.sortable-ghost')) {
-                    openEditCardModal(card.dataset.cardId);
+                // Prevent opening modal when clicking delete button or during drag
+                if (!e.target.closest('.delete-card-btn') && !card.classList.contains('dragging')) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    const cardId = card.dataset.cardId;
+                    if (cardId && cardsData[cardId]) {
+                        openEditCardModal(cardId);
+                    }
                 }
             });
         });
 
         return listDiv;
+    }
+
+    async function saveList() {
+        const titleInput = document.getElementById('listTitle');
+        const title = titleInput.value.trim();
+        
+        if (!title) return;
+
+        try {
+            const response = await fetch('/api/lists', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ title })
+            });
+
+            if (response.ok) {
+                addListModal.hide();
+                titleInput.value = '';
+                loadLists();
+            }
+        } catch (error) {
+            console.error('Error saving list:', error);
+        }
+    }
+
+    async function deleteList(listId) {
+        try {
+            const response = await fetch(`/api/lists/${listId}`, {
+                method: 'DELETE'
+            });
+
+            if (response.ok) {
+                loadLists();
+            }
+        } catch (error) {
+            console.error('Error deleting list:', error);
+        }
     }
 
     function createCardHTML(card) {
@@ -150,41 +198,105 @@ document.addEventListener('DOMContentLoaded', function() {
             return;
         }
 
-        // Populate modal with card data
-        document.getElementById('editCardId').value = cardId;
-        document.getElementById('editCardTitle').value = card.title || '';
-        document.getElementById('editCardDescription').value = card.description || '';
-        document.getElementById('editCardDueDate').value = card.due_date ? card.due_date.slice(0, 16) : '';
-        document.getElementById('editCardAssignedTo').value = card.assigned_to || '';
-        document.getElementById('editCardCompletion').value = card.completion_rate || 0;
+        const modalElement = document.getElementById('editCardModal');
+        if (!modalElement) {
+            console.error('Modal element not found');
+            return;
+        }
+
+        // Debug: Log modal HTML
+        console.log('Modal HTML:', modalElement.innerHTML);
+
+        // Add event listener for when modal is shown
+        modalElement.addEventListener('shown.bs.modal', function setModalFields() {
+            // Debug: Log modal form fields
+            const form = modalElement.querySelector('#editCardForm');
+            console.log('Form fields:', {
+                form: form,
+                inputs: form ? Array.from(form.querySelectorAll('input, textarea')).map(el => ({
+                    id: el.id,
+                    name: el.name,
+                    type: el.type
+                })) : []
+            });
+
+            // Set form field values using querySelector within the modal
+            const setField = (selector, value) => {
+                const element = modalElement.querySelector(selector);
+                if (element) {
+                    element.value = value;
+                    console.log(`Set ${selector} to:`, value); // Debug log
+                } else {
+                    console.error(`Element not found: ${selector}`);
+                    // Debug: Try finding it without the #
+                    const altElement = modalElement.querySelector(selector.replace('#', ''));
+                    console.log(`Tried finding without #:`, altElement);
+                }
+            };
+
+            // Set each field
+            setField('#editCardId', cardId);
+            setField('#editCardTitle', card.title || '');
+            setField('#editCardDescription', card.description || '');
+            setField('#editCardDueDate', card.due_date ? card.due_date.slice(0, 16) : '');
+            setField('#editCardAssignedTo', card.assigned_to || '');
+            setField('#editCardCompletion', card.completion_rate || 0);
+
+            // Remove the event listener
+            modalElement.removeEventListener('shown.bs.modal', setModalFields);
+        });
 
         editCardModal.show();
     }
 
     async function updateCard() {
-        const cardId = document.getElementById('editCardId').value;
-        const data = {
-            title: document.getElementById('editCardTitle').value.trim(),
-            description: document.getElementById('editCardDescription').value.trim(),
-            due_date: document.getElementById('editCardDueDate').value,
-            assigned_to: document.getElementById('editCardAssignedTo').value.trim(),
-            completion_rate: parseInt(document.getElementById('editCardCompletion').value)
+        const modalElement = document.getElementById('editCardModal');
+        if (!modalElement) {
+            console.error('Modal element not found');
+            return;
+        }
+
+        const getValue = (selector) => {
+            const element = modalElement.querySelector(selector);
+            return element ? element.value : null;
         };
 
-        if (!data.title) return;
+        const cardId = getValue('#editCardId');
+        if (!cardId) {
+            console.error('Card ID not found');
+            return;
+        }
+
+        const card = {
+            title: getValue('#editCardTitle') || '',
+            description: getValue('#editCardDescription') || '',
+            due_date: getValue('#editCardDueDate') || '',
+            assigned_to: getValue('#editCardAssignedTo') || '',
+            completion_rate: parseInt(getValue('#editCardCompletion')) || 0
+        };
 
         try {
             const response = await fetch(`/api/cards/${cardId}`, {
                 method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(data)
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(card)
             });
 
             if (response.ok) {
+                // Clear focus before hiding modal
+                document.activeElement.blur();
+                
+                // Hide modal
                 editCardModal.hide();
-                // Update the stored card data
-                cardsData[cardId] = { ...cardsData[cardId], ...data };
-                loadLists();
+                
+                // Wait for modal to be hidden before reloading lists
+                setTimeout(() => {
+                    loadLists();
+                }, 300);
+            } else {
+                console.error('Failed to update card');
             }
         } catch (error) {
             console.error('Error updating card:', error);
@@ -193,193 +305,112 @@ document.addEventListener('DOMContentLoaded', function() {
 
     async function deleteCard() {
         const cardId = document.getElementById('editCardId').value;
-        if (!confirm('Are you sure you want to delete this card?')) return;
-
+        
         try {
             const response = await fetch(`/api/cards/${cardId}`, {
                 method: 'DELETE'
             });
 
             if (response.ok) {
+                // Clear focus before hiding modal
+                document.activeElement.blur();
+                
+                // Hide modal
                 editCardModal.hide();
-                // Remove the card from stored data
-                delete cardsData[cardId];
-                loadLists();
+                
+                // Wait for modal to be hidden before reloading lists
+                setTimeout(() => {
+                    loadLists();
+                }, 300);
+            } else {
+                console.error('Failed to delete card');
             }
         } catch (error) {
             console.error('Error deleting card:', error);
         }
     }
 
-    async function handleCardDrop(event) {
-        const cardId = event.item.dataset.cardId;
-        const newListId = event.to.closest('.list').dataset.listId;
-        const newPosition = Array.from(event.to.children).indexOf(event.item);
-
-        try {
-            await fetch(`/api/cards/${cardId}`, {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    list_id: parseInt(newListId),
-                    position: newPosition
-                })
-            });
-            // Update the stored card data
-            cardsData[cardId].list_id = parseInt(newListId);
-            cardsData[cardId].position = newPosition;
-        } catch (error) {
-            console.error('Error updating card position:', error);
-            loadLists(); // Reload to restore original state
-        }
-    }
-
-    async function saveList() {
-        const titleInput = document.getElementById('listTitle');
-        const title = titleInput.value.trim();
-        
-        if (!title) return;
-
-        try {
-            const response = await fetch('/api/lists', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ title })
-            });
-
-            if (response.ok) {
-                addListModal.hide();
-                titleInput.value = '';
-                loadLists();
-            }
-        } catch (error) {
-            console.error('Error saving list:', error);
-        }
-    }
-
-    async function deleteList(listId) {
-        if (!confirm('Are you sure you want to delete this list and all its cards?')) return;
-
-        try {
-            const response = await fetch(`/api/lists/${listId}`, {
-                method: 'DELETE'
-            });
-
-            if (response.ok) {
-                loadLists();
-            }
-        } catch (error) {
-            console.error('Error deleting list:', error);
-        }
-    }
-
     async function saveCard() {
-        const data = {
-            list_id: parseInt(document.getElementById('listId').value),
-            title: document.getElementById('cardTitle').value.trim(),
-            description: document.getElementById('cardDescription').value.trim(),
+        const listId = document.getElementById('listId').value;
+        const card = {
+            title: document.getElementById('cardTitle').value,
+            description: document.getElementById('cardDescription').value,
             due_date: document.getElementById('cardDueDate').value,
-            assigned_to: document.getElementById('cardAssignedTo').value.trim(),
-            completion_rate: parseInt(document.getElementById('cardCompletion').value)
+            assigned_to: document.getElementById('cardAssignedTo').value,
+            completion_rate: parseInt(document.getElementById('cardCompletion').value),
+            list_id: parseInt(listId)
         };
-
-        if (!data.title) return;
 
         try {
             const response = await fetch('/api/cards', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(data)
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(card)
             });
 
             if (response.ok) {
+                // Clear focus before hiding modal
+                document.activeElement.blur();
+                
+                // Hide modal and reset form
                 addCardModal.hide();
-                document.getElementById('addCardForm').reset();
-                loadLists();
+                document.getElementById('cardTitle').value = '';
+                document.getElementById('cardDescription').value = '';
+                document.getElementById('cardDueDate').value = '';
+                document.getElementById('cardAssignedTo').value = '';
+                document.getElementById('cardCompletion').value = '0';
+                
+                // Wait for modal to be hidden before reloading lists
+                setTimeout(() => {
+                    loadLists();
+                }, 300);
             }
         } catch (error) {
             console.error('Error saving card:', error);
         }
     }
 
-    async function handleListDrop(event) {
-        const listId = event.item.dataset.listId;
+    // Initialize drag and drop functionality
+    function initializeDragAndDrop() {
+        const lists = document.querySelectorAll('.list');
+        lists.forEach(list => {
+            const container = list.querySelector('.cards-container');
+            new Sortable(container, {
+                group: 'cards',
+                animation: 150,
+                onEnd: handleCardDrop
+            });
+        });
+    }
+
+    async function handleCardDrop(event) {
+        if (!event.from || !event.to) return;
+        
+        const cardId = event.item.dataset.cardId;
+        const newListId = event.to.closest('.list').dataset.listId;
         const newPosition = Array.from(event.to.children).indexOf(event.item);
 
         try {
-            await fetch(`/api/lists/${listId}`, {
+            const response = await fetch(`/api/cards/${cardId}`, {
                 method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
+                headers: {
+                    'Content-Type': 'application/json',
+                },
                 body: JSON.stringify({
+                    list_id: newListId,
                     position: newPosition
                 })
             });
-        } catch (error) {
-            console.error('Error updating list position:', error);
-            loadLists(); // Reload to restore original state
-        }
-    }
 
-    function initializeDragAndDrop() {
-        const cards = document.querySelectorAll('.card');
-        const lists = document.querySelectorAll('.list');
-
-        cards.forEach(card => {
-            card.addEventListener('dragstart', handleDragStart);
-            card.addEventListener('dragend', handleDragEnd);
-        });
-
-        lists.forEach(list => {
-            list.addEventListener('dragover', handleDragOver);
-            list.addEventListener('drop', handleDrop);
-        });
-    }
-
-    function handleDragStart(e) {
-        e.target.classList.add('dragging');
-        e.dataTransfer.setData('text/plain', e.target.dataset.cardId);
-    }
-
-    function handleDragEnd(e) {
-        e.target.classList.remove('dragging');
-    }
-
-    function handleDragOver(e) {
-        e.preventDefault();
-        e.dataTransfer.dropEffect = 'move';
-    }
-
-    async function handleDrop(e) {
-        e.preventDefault();
-        const cardId = e.dataTransfer.getData('text/plain');
-        const targetList = e.currentTarget;
-        const listId = targetList.dataset.listId;
-        const cardElement = document.querySelector(`[data-card-id="${cardId}"]`);
-
-        if (cardElement && targetList) {
-            const cardsContainer = targetList.querySelector('.cards-container');
-            if (cardsContainer) {
-                try {
-                    const response = await fetch('/move_card', {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                        },
-                        body: JSON.stringify({
-                            card_id: cardId,
-                            list_id: listId
-                        })
-                    });
-
-                    if (response.ok) {
-                        cardsContainer.appendChild(cardElement);
-                    } else {
-                        console.error('Failed to move card');
-                    }
-                } catch (error) {
-                    console.error('Error moving card:', error);
-                }
+            if (!response.ok) {
+                console.error('Failed to update card position');
+                loadLists(); // Reload to restore original state
             }
+        } catch (error) {
+            console.error('Error updating card position:', error);
+            loadLists(); // Reload to restore original state
         }
     }
 });

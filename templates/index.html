@@ -57,19 +57,21 @@
     </div>
 
     <!-- Add Card Modal -->
-    <div class="modal fade" id="addCardModal" tabindex="-1">
+    <div class="modal fade" id="addCardModal" tabindex="-1" aria-labelledby="addCardModalLabel" aria-hidden="true" data-bs-backdrop="static">
         <div class="modal-dialog">
             <div class="modal-content">
                 <div class="modal-header">
-                    <h5 class="modal-title"><i class="fas fa-plus-square me-2"></i>Add New Card</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    <h5 class="modal-title" id="addCardModalLabel">
+                        <i class="fas fa-plus-square me-2"></i>Add New Card
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
                 <div class="modal-body">
                     <form id="addCardForm">
                         <input type="hidden" id="listId">
                         <div class="mb-3">
                             <label for="cardTitle" class="form-label">Title</label>
-                            <input type="text" class="form-control" id="cardTitle" required>
+                            <input type="text" class="form-control" id="cardTitle" required autofocus>
                         </div>
                         <div class="mb-3">
                             <label for="cardDescription" class="form-label">Description</label>
@@ -102,40 +104,42 @@
     </div>
 
     <!-- Edit Card Modal -->
-    <div class="modal fade" id="editCardModal" tabindex="-1">
+    <div class="modal fade" id="editCardModal" tabindex="-1" aria-labelledby="editCardModalLabel" aria-hidden="true" data-bs-backdrop="static">
         <div class="modal-dialog">
             <div class="modal-content">
                 <div class="modal-header">
-                    <h5 class="modal-title"><i class="fas fa-edit me-2"></i>Edit Card</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    <h5 class="modal-title" id="editCardModalLabel">
+                        <i class="fas fa-edit me-2"></i>Edit Card
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
                 <div class="modal-body">
                     <form id="editCardForm">
-                        <input type="hidden" id="editCardId">
+                        <input type="hidden" id="editCardId" name="editCardId">
                         <div class="mb-3">
                             <label for="editCardTitle" class="form-label">Title</label>
-                            <input type="text" class="form-control" id="editCardTitle" required>
+                            <input type="text" class="form-control" id="editCardTitle" name="editCardTitle" required autofocus>
                         </div>
                         <div class="mb-3">
                             <label for="editCardDescription" class="form-label">Description</label>
-                            <textarea class="form-control" id="editCardDescription" rows="3"></textarea>
+                            <textarea class="form-control" id="editCardDescription" name="editCardDescription" rows="3"></textarea>
                         </div>
                         <div class="mb-3">
                             <label for="editCardDueDate" class="form-label">Due Date</label>
-                            <input type="datetime-local" class="form-control" id="editCardDueDate">
+                            <input type="datetime-local" class="form-control" id="editCardDueDate" name="editCardDueDate">
                         </div>
                         <div class="mb-3">
                             <label for="editCardAssignedTo" class="form-label">Assigned To</label>
-                            <input type="text" class="form-control" id="editCardAssignedTo">
+                            <input type="text" class="form-control" id="editCardAssignedTo" name="editCardAssignedTo">
                         </div>
                         <div class="mb-3">
                             <label for="editCardCompletion" class="form-label">Completion Rate (%)</label>
-                            <input type="number" class="form-control" id="editCardCompletion" min="0" max="100">
+                            <input type="number" class="form-control" id="editCardCompletion" name="editCardCompletion" min="0" max="100" value="0">
                         </div>
                     </form>
                 </div>
                 <div class="modal-footer">
-                    <button type="button" class="btn btn-danger" id="deleteCardBtn">
+                    <button type="button" class="btn btn-danger me-auto" id="deleteCardBtn">
                         <i class="fas fa-trash-alt me-2"></i>Delete
                     </button>
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
