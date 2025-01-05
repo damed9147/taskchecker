@@ -130,10 +130,20 @@ body::before {
     border-radius: 12px;
     padding: 1.5rem;
     margin-bottom: 1rem;
-    cursor: pointer;
-    transition: all 0.3s ease;
+    cursor: grab;
+    transition: transform 0.2s, box-shadow 0.2s;
     position: relative;
     overflow: hidden;
+}
+
+.card:active {
+    cursor: grabbing;
+}
+
+.card.dragging {
+    opacity: 0.5;
+    transform: scale(1.02);
+    box-shadow: 0 8px 16px rgba(0, 0, 0, 0.2);
 }
 
 .card::before {
@@ -178,6 +188,10 @@ body::before {
     color: var(--primary-color);
     width: 20px;
     text-shadow: var(--neon-shadow);
+}
+
+.list.drag-over {
+    background: rgba(0, 255, 179, 0.1);
 }
 
 /* Progress Bar */

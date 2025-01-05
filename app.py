@@ -128,6 +128,24 @@ def handle_card(card_id):
         db.session.commit()
         return jsonify({'message': 'Card deleted successfully'})
 
+@app.route('/move_card', methods=['POST'])
+def move_card():
+    data = request.get_json()
+    card_id = data.get('card_id')
+    new_list_id = data.get('list_id')
+    
+    if not card_id or not new_list_id:
+        return jsonify({'error': 'Missing required fields'}), 400
+        
+    try:
+        card = Card.query.get_or_404(card_id)
+        card.list_id = new_list_id
+        db.session.commit()
+        return jsonify({'success': True}), 200
+    except Exception as e:
+        print(f"Error moving card: {e}")
+        return jsonify({'error': 'Failed to move card'}), 500
+
 # Register the API views
 app.add_url_rule('/api/lists', view_func=ListAPI.as_view('lists'), methods=['GET', 'POST'])
 app.add_url_rule('/api/lists/<int:list_id>', view_func=ListDetailAPI.as_view('list'), methods=['PUT', 'DELETE'])

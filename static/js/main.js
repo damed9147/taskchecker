@@ -48,6 +48,8 @@ document.addEventListener('DOMContentLoaded', function() {
                 animation: 150,
                 onEnd: handleListDrop
             });
+
+            initializeDragAndDrop();
         } catch (error) {
             console.error('Error loading lists:', error);
         }
@@ -107,7 +109,7 @@ document.addEventListener('DOMContentLoaded', function() {
         const progressClass = isComplete ? 'bg-success' : '';
         
         return `
-            <div class="card" data-card-id="${card.id}">
+            <div class="card" data-card-id="${card.id}" draggable="true">
                 <div class="card-title">
                     <i class="fas fa-tasks me-2"></i>${card.title}
                 </div>
@@ -315,6 +317,69 @@ document.addEventListener('DOMContentLoaded', function() {
         } catch (error) {
             console.error('Error updating list position:', error);
             loadLists(); // Reload to restore original state
+        }
+    }
+
+    function initializeDragAndDrop() {
+        const cards = document.querySelectorAll('.card');
+        const lists = document.querySelectorAll('.list');
+
+        cards.forEach(card => {
+            card.addEventListener('dragstart', handleDragStart);
+            card.addEventListener('dragend', handleDragEnd);
+        });
+
+        lists.forEach(list => {
+            list.addEventListener('dragover', handleDragOver);
+            list.addEventListener('drop', handleDrop);
+        });
+    }
+
+    function handleDragStart(e) {
+        e.target.classList.add('dragging');
+        e.dataTransfer.setData('text/plain', e.target.dataset.cardId);
+    }
+
+    function handleDragEnd(e) {
+        e.target.classList.remove('dragging');
+    }
+
+    function handleDragOver(e) {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+    }
+
+    async function handleDrop(e) {
+        e.preventDefault();
+        const cardId = e.dataTransfer.getData('text/plain');
+        const targetList = e.currentTarget;
+        const listId = targetList.dataset.listId;
+        const cardElement = document.querySelector(`[data-card-id="${cardId}"]`);
+
+        if (cardElement && targetList) {
+            const cardsContainer = targetList.querySelector('.cards-container');
+            if (cardsContainer) {
+                try {
+                    const response = await fetch('/move_card', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            card_id: cardId,
+                            list_id: listId
+                        })
+                    });
+
+                    if (response.ok) {
+                        cardsContainer.appendChild(cardElement);
+                    } else {
+                        console.error('Failed to move card');
+                    }
+                } catch (error) {
+                    console.error('Error moving card:', error);
+                }
+            }
         }
     }
 });
